@@ -13,23 +13,34 @@ LDFLAGS = -g
 #$(TARGET): $(OBJ)
 #        $(CXX) $(OBJ) -o $@ $(LDFLAGS)
 
+#%.o: %.cpp
+#        $(CXX) $(CXXFLAGS) -c $< -o $@
 
-all: "../bin/LinuxKeyrings.so"
 
-
+all: "../bin/LinuxKeyrings.so" "../bin/App.class" "../bin/ErrnoException.class" "../bin/LinuxKeyrings.class"
 
 "../bin/LinuxKeyrings.so": LinuxKeyrings.c LinuxKeyrings.h
 	gcc -shared -fPIC -nostdlib -nostartfiles -o ../bin/LinuxKeyrings.so $(CCFLAGS) LinuxKeyrings.c
 
-
 LinuxKeyrings.h: LinuxKeyrings.java
 	javac -h . -d ../bin LinuxKeyrings.java 
 
+"../bin/LinuxKeyrings.class":
+	javac -d ../bin LinuxKeyrings.java
 
-#%.o: %.cpp
-#        $(CXX) $(CXXFLAGS) -c $< -o $@
+"../bin/ErrnoException.class":
+	javac -d ../bin ErrnoException.java 
+
+"../bin/App.class":
+	javac -d ../bin App.java
+
+
 
 clean:
-	rm -f ../bin/$(OBJ) ../bin/$(TARGET)
+	#rm -f ../bin/$(OBJ) ../bin/$(TARGET)
+	rm -f ../bin/*
+	rm -f LinuxKeyrings.h
+	rm -f *.class
+
 
 .PHONY: all clean

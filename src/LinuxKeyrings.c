@@ -1,17 +1,3 @@
-#include <jni.h>
-#include "LinuxKeyrings.h"   /* Fichier auto généré par "javac -h . LinuxKeyrings.java"  */
-#include <jni_md.h>
-
-
-
-
-#include <sys/syscall.h>      /* Definition of SYS_* constants */
-#include <unistd.h>
-#include <keyutils.h>
-
-
-
-
 /*
 Se compile par un truc du genre :
 
@@ -21,13 +7,28 @@ gcc -fPIC -shared -nostartfiles -o Linuxkeyrings.so
 
 Les répertoires d'includes sont dans le chemin d'install de java, pas par défaut
 
-
-
-Note : dans /usr/include/keyutils.h :
-typedef int32_t key_serial_t;
-
+Note /usr/include/keyutils.h : typedef int32_t key_serial_t;
 
 */
+
+
+/* Includes syscall */
+#include <sys/syscall.h>      /* Definition of SYS_* constants */
+#include <unistd.h>
+#include <keyutils.h>
+
+/* Includes libc */
+//#include <string.h>
+
+/* Includes spécifiques au projet */
+#include <jni.h>
+#include "LinuxKeyrings.h"   /* Fichier auto généré par "javac -h . LinuxKeyrings.java"  */
+#include <jni_md.h>
+
+
+/* Includes locaux */
+
+
 
 
 
@@ -94,19 +95,62 @@ JNIEXPORT jint JNICALL Java_LinuxKeyrings_doUpdate
 JNIEXPORT jint JNICALL Java_LinuxKeyrings_doRead
   (JNIEnv *jniEnv, jclass, jint key, jbyteArray resultBuffer) {
     // private static native int doRead(int key, byte[] resultBuffer);
-    jbyte* bResult     = (*jniEnv)->GetByteArrayElements(jniEnv, resultBuffer,      NULL);  
-    int    resultLen   = (*jniEnv)->GetArrayLength(jniEnv, resultBuffer);
-    size_t nbLus = syscall(SYS_keyctl, KEYCTL_READ, key, bResult, resultLen);
-    (*jniEnv)->ReleaseByteArrayElements(jniEnv, resultBuffer, bResult, 0); /* 0 -> fait la recopie des données vers la JVM*/
-    return nbLus;
+    jbyte* bResult   = (*jniEnv)->GetByteArrayElements(jniEnv, resultBuffer, NULL);
+    jsize  resultLen = (*jniEnv)->GetArrayLength(jniEnv, resultBuffer);
+
+    ssize_t payloadLen = syscall(SYS_keyctl, KEYCTL_READ, key, bResult, resultLen);
+    if (payloadLen < 0) {
+        /* libère le buffer sans recopier (rien de valable à copier) */
+        (*jniEnv)->ReleaseByteArrayElements(jniEnv, resultBuffer, bResult, JNI_ABORT);
+        return payloadLen;
+    }
+
+    /* Si on a utilisé GetByteArrayElements, laisser Release copier les données vers Java */
+    (*jniEnv)->ReleaseByteArrayElements(jniEnv, resultBuffer, bResult, 0); /* 0 -> copy back */
+
+    return (jint)payloadLen;
   }
   
 
+  JNIEXPORT jint JNICALL Java_LinuxKeyrings_doDescribe
+  (JNIEnv *jniEnv, jclass, jint key, jbyteArray resultBuffer) {
+
+    // private static native int doDescribe(int key, byte[] descr);
+
+    jbyte* bResult   = (*jniEnv)->GetByteArrayElements(jniEnv, resultBuffer, NULL);
+    jsize  resultLen = (*jniEnv)->GetArrayLength(jniEnv, resultBuffer);
+
+    ssize_t payloadLen = syscall(SYS_keyctl, KEYCTL_DESCRIBE, key, bResult, resultLen);
+    if (payloadLen < 0) {
+        /* libère le buffer sans recopier (rien de valable à copier) */
+        (*jniEnv)->ReleaseByteArrayElements(jniEnv, resultBuffer, bResult, JNI_ABORT);
+        return payloadLen;
+    }
+
+    /* Si on a utilisé GetByteArrayElements, laisser Release copier les données vers Java */
+    (*jniEnv)->ReleaseByteArrayElements(jniEnv, resultBuffer, bResult, 0); /* 0 -> copy back */
+
+    return (jint)payloadLen;
+  }
 
 
-#ifdef DEADCODE
+
+JNIEXPORT jint JNICALL Java_LinuxKeyrings_doSearch
+  (JNIEnv *jniEnv, jclass, jint baseKeyring, jbyteArray jType, jbyteArray jDescr, jint linkTo) {
+    // private static native int doSearch(int baseKeyring, byte[] typeBytes, byte[] descrBytes, int linkTo);
+    jbyte* bType  = (*jniEnv)->GetByteArrayElements(jniEnv, jType,  NULL);
+    jbyte* bDescr = (*jniEnv)->GetByteArrayElements(jniEnv, jDescr, NULL);
+
+    int result = syscall(SYS_keyctl, KEYCTL_SEARCH, baseKeyring, bType, bDescr, linkTo);
+
+    (*jniEnv)->ReleaseByteArrayElements(jniEnv, jType,  bType,  JNI_ABORT);
+    (*jniEnv)->ReleaseByteArrayElements(jniEnv, jDescr, bDescr, JNI_ABORT);
+
+    return result;
+  }
+
+
 /*
-
 gcc -I /usr/lib/jvm/java-17-openjdk-amd64/include -I /usr/lib/jvm/java-17-openjdk-amd64/include/linux
 
 KEYCTL_GET_KEYRING_ID       Map a special key ID to a real key ID for this process
@@ -139,10 +183,8 @@ KEYCTL_RESTRICT_KEYRING    Apply  a key-linking restriction to the keyring
 249	sys_request_key	(const char *_type	const char *_description	const char *_callout_info	key_serial_t destringid		)
 250	long syscall(SYS_keyctl, int operation, unsigned long arg2, unsigned long arg3, unsigned long arg4, unsigned long arg5);
 
-
 #define SYS_keyctl
 #define SYS_request_key
 #define SYS_add_key
 
 */
-#endif
